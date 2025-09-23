@@ -45,7 +45,7 @@
 Clone the repo and run the installation script as root to configure the system or upgrade the already installed controller:
 
 ```text
-git clone https://github.com/nmaggioni/r710-fan-controller.git
+git clone https://github.com/Agoratlas/poweredge-controller
 cd r710-fan-controller
 sudo ./install.sh [<installation path>]
 ```
