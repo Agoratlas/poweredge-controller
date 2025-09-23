@@ -1,9 +1,9 @@
 general:
-  debug: false
-  interval: 60
+  debug: true
+  interval: 10
 
 hosts:
-  - name: localhost
+  - name: local_ipmi
     hysteresis: 3
     temperatures:
       - 50

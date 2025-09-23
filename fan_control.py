@@ -3,6 +3,7 @@
 import yaml
 import getopt
 import os
+import prometheus_client
 import re
 import sensors  # https://github.com/bastienleonard/pysensors.git
 import subprocess
@@ -13,19 +14,23 @@ import signal
 config = {
     'config_paths': ['fan_control.yaml', '/opt/fan_control/fan_control.yaml'],
     'general': {
-        'debug': False,
+        'debug': True,
         'interval': 60
     },
     'hosts': []
 }
 state = {}
 
+prom_fan_speed_gauge = prometheus_client.Gauge('fan_speed_percentage', 'Current fan speed percentage', ['host'])
+prom_fan_mode = prometheus_client.Enum('fan_control_mode', 'Current fan control mode', ['host'], states=['automatic', 'manual'])
+prom_temperature_gauge = prometheus_client.Gauge('cpu_temperature_celsius', 'Current CPU temperature in Celsius', ['host'])
+prom_power_gauge = prometheus_client.Gauge('power_watts', 'Current Power consumption in Watts', ['host'])
 
 class ConfigError(Exception):
     pass
 
 
-def ipmitool(args, host):
+def ipmitool(args, host, status_only=True):
     global state
 
     cmd = ["ipmitool"]
@@ -40,19 +45,22 @@ def ipmitool(args, host):
         return True
 
     try:
-        subprocess.check_output(cmd, timeout=15)
+        command_output = subprocess.check_output(cmd, timeout=15)
     except subprocess.CalledProcessError:
         print("\"{}\" command has returned a non-0 exit code".format(cmd), file=sys.stderr)
         return False
     except subprocess.TimeoutExpired:
         print("\"{}\" command has timed out".format(cmd), file=sys.stderr)
         return False
-    return True
-
+    if status_only:
+        return True
+    else:
+        return command_output.decode('utf-8')
 
 def set_fan_control(wanted_mode, host):
     global state
 
+    prom_fan_mode.labels(host=host['name']).state(wanted_mode)
     if wanted_mode == "manual" or wanted_mode == "automatic":
         if wanted_mode == "manual" and state[host['name']]['fan_control_mode'] == "automatic":
             if not config['general']['debug']:
@@ -73,6 +81,8 @@ def set_fan_speed(threshold_n, host):
     wanted_percentage = host['speeds'][threshold_n]
     if wanted_percentage == state[host['name']]['fan_speed']:
         return
+
+    prom_fan_speed_gauge.labels(host=host['name']).set(wanted_percentage)
 
     if 5 <= wanted_percentage <= 100:
         wanted_percentage_hex = "{0:#0{1}x}".format(wanted_percentage, 4)
@@ -158,7 +168,7 @@ def parse_opts():
             config['general']['interval'] = arg
 
 
-def checkHysteresis(temperature, threshold_n, host):
+def check_hysteresis(temperature, threshold_n, host):
     global state
 
     # Skip checks if hysteresis is disabled for this host
@@ -184,27 +194,35 @@ def compute_fan_speed(temp_average, host):
     # Tavg < Threshold0
     if (
         temp_average <= host['temperatures'][0] and
-        checkHysteresis(temp_average, 0, host)
+        check_hysteresis(temp_average, 0, host)
     ):
         set_fan_speed(0, host)
 
     # Threshold0 < Tavg ≤ Threshold1
     elif (
         host['temperatures'][0] < temp_average <= host['temperatures'][1] and
-        checkHysteresis(temp_average, 1, host)
+        check_hysteresis(temp_average, 1, host)
     ):
         set_fan_speed(1, host)
 
     # Threshold1 < Tavg ≤ Threshold2
     elif (
         host['temperatures'][1] < temp_average <= host['temperatures'][2] and
-        checkHysteresis(temp_average, 2, host)
+        check_hysteresis(temp_average, 2, host)
     ):
         set_fan_speed(2, host)
 
     # Tavg > Threshold2
     elif host['temperatures'][2] < temp_average:
         set_fan_control("automatic", host)
+
+
+def update_power_metrics(host):
+    cmd_result = ipmitool("dcmi power reading", host, status_only=False)
+    power_value = re.search(r'Instantaneous power reading:\s+([0-9]+)\s+Watts', cmd_result)
+    if power_value:
+        total_power = int(power_value.group(1))
+        prom_power_gauge.labels(host=host['name']).set(total_power)
 
 
 def main():
@@ -240,7 +258,10 @@ def main():
                 cmd.close()
 
             temp_average = round(sum(temps)/len(temps))
+            prom_temperature_gauge.labels(host=host['name']).set(temp_average)
             compute_fan_speed(temp_average, host)
+
+            update_power_metrics(host)
 
         time.sleep(config['general']['interval'])
 
@@ -255,6 +276,7 @@ def graceful_shutdown(signalnum, frame):
 if __name__ == "__main__":
     # Reset fan control to automatic when getting killed
     signal.signal(signal.SIGTERM, graceful_shutdown)
+    prometheus_client.start_http_server(8000)
 
     try:
         try:
