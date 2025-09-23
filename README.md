@@ -1,4 +1,4 @@
-# Dell R710 Fan Control Script
+# Dell PowerEdge Fan Control Script
 
 > A temperature-based fan speed controller for Dell servers (tested on an R710, should work with most PowerEdges). Supports both local and remote hosts.
 
@@ -46,7 +46,7 @@ Clone the repo and run the installation script as root to configure the system o
 
 ```text
 git clone https://github.com/Agoratlas/poweredge-controller
-cd r710-fan-controller
+cd poweredge-controller
 sudo ./install.sh [<installation path>]
 ```
 
