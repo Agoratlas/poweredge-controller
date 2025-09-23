@@ -73,7 +73,7 @@ Remote hosts must also contain both the `remote_temperature_command` string and 
 
 | Key | Description |
 | --- | --- |
-| `general`.`debug` | Toggle debug mode _(print ipmitools commands instead of executing them, enable additional logging)_. |
+| `general`.`debug` | Enable additional logging. |
 | `general`.`interval` | How often (in seconds) to read the CPUs' temperatures and adjust the fans' speeds. |
 | `hosts`_[n]_.`hysteresis` | How many degrees (in °C) the CPUs' temperature must go below the threshold to trigger slowing the fans down. _Prevents rapid speed changes, a good starting value can be `3`._ |
 | `hosts`_[n]_.`temperatures` | A list of three upper bounds (in °C) of temperature thresholds. _See [below](#how-it-works) for details._ |
