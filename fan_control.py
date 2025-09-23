@@ -21,10 +21,10 @@ config = {
 }
 state = {}
 
-prom_fan_speed_gauge = prometheus_client.Gauge('fan_speed_percentage', 'Current fan speed percentage', ['host'])
-prom_fan_mode = prometheus_client.Enum('fan_control_mode', 'Current fan control mode', ['host'], states=['automatic', 'manual'])
-prom_temperature_gauge = prometheus_client.Gauge('cpu_temperature_celsius', 'Current CPU temperature in Celsius', ['host'])
-prom_power_gauge = prometheus_client.Gauge('power_watts', 'Current Power consumption in Watts', ['host'])
+prom_fan_speed_gauge = prometheus_client.Gauge('poweredge_fan_speed_percentage', 'Current fan speed percentage', ['host'])
+prom_fan_mode = prometheus_client.Enum('poweredge_fan_control_mode', 'Current fan control mode', ['host'], states=['automatic', 'manual'])
+prom_temperature_gauge = prometheus_client.Gauge('poweredge_cpu_temperature_celsius', 'Current CPU temperature in Celsius', ['host'])
+prom_power_gauge = prometheus_client.Gauge('poweredge_power_watts', 'Current Power consumption in Watts', ['host'])
 
 class ConfigError(Exception):
     pass
