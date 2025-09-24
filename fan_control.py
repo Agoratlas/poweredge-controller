@@ -241,7 +241,7 @@ def update_smart_values(host):
         print(f"Checking disk health status on host {host['name']}")
 
     for disk in pySMART.DeviceList():
-        if disk.name == 'bus/0':
+        if disk.name.startswith('bus/'):
             continue # Virtual disk in RAID controller
         print(f"[{host['name']}] Disk {disk.name} SMART status: {disk.assessment}")
         pass_status = 1 if disk.assessment == 'PASS' else 0
