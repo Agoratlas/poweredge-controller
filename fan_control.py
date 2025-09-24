@@ -4,6 +4,7 @@ import yaml
 import getopt
 import os
 import prometheus_client
+import pySMART
 import re
 import sensors  # https://github.com/bastienleonard/pysensors.git
 import subprocess
@@ -15,7 +16,8 @@ config = {
     'config_paths': ['fan_control.yaml', '/opt/fan_control/fan_control.yaml'],
     'general': {
         'debug': True,
-        'interval': 60
+        'interval': 60,
+        'smartinterval': 3600
     },
     'hosts': []
 }
@@ -25,6 +27,7 @@ prom_fan_speed_gauge = prometheus_client.Gauge('poweredge_fan_speed_percentage',
 prom_fan_mode = prometheus_client.Enum('poweredge_fan_control_mode', 'Current fan control mode', ['host'], states=['automatic', 'manual'])
 prom_temperature_gauge = prometheus_client.Gauge('poweredge_cpu_temperature_celsius', 'Current CPU temperature in Celsius', ['host'])
 prom_power_gauge = prometheus_client.Gauge('poweredge_power_watts', 'Current Power consumption in Watts', ['host'])
+prom_smart_status = prometheus_client.Gauge('poweredge_disk_smart_status', 'Current SMART status of the disk (1=PASS, 0=FAIL)', ['host', 'disk'])
 
 class ConfigError(Exception):
     pass
@@ -98,6 +101,7 @@ def parse_config():
     global config
     _debug = config['general']['debug']
     _interval = config['general']['interval']
+    _smartinterval = config['general']['smartinterval']
 
     config_path = None
     for path in config['config_paths']:
@@ -118,6 +122,8 @@ def parse_config():
             config['general']['debug'] = _debug
         if 'interval' not in list(config['general'].keys()):
             config['general']['interval'] = _interval
+        if 'smartinterval' not in list(config['general'].keys()):
+            config['general']['smartinterval'] = _smartinterval
 
         for host in config['hosts']:
             if 'hysteresis' not in list(host.keys()):
@@ -224,6 +230,24 @@ def update_power_metrics(host):
         prom_power_gauge.labels(host=host['name']).set(total_power)
 
 
+def update_smart_values(host):
+    global config
+    global state
+
+    if state[host['name']]['is_remote']:
+        return # SMART check is only supported for local hosts
+    
+    if config['general']['debug']:
+        print(f"Checking disk health status on host {host['name']}")
+
+    for disk in pySMART.DeviceList():
+        if disk.name == 'bus/0':
+            continue # Virtual disk in RAID controller
+        print(f"[{host['name']}] Disk {disk.name} SMART status: {disk.assessment}")
+        pass_status = 1 if disk.assessment == 'PASS' else 0
+        prom_smart_status.labels(host=host['name'], disk=disk.name).set(pass_status)
+
+
 def main():
     global config
     global state
@@ -236,6 +260,8 @@ def main():
                 host['temperatures'][1], host['speeds'][1],
                 host['temperatures'][2], host['speeds'][2],
             ))
+        
+    state['next_smart_check'] = -1
 
     while True:
         for host in config['hosts']:
@@ -261,6 +287,10 @@ def main():
             compute_fan_speed(temp_average, host)
 
             update_power_metrics(host)
+
+            if time.time() >= state['next_smart_check']:
+                update_smart_values(host)
+                state['next_smart_check'] = time.time() + config['general']['smartinterval']
 
         time.sleep(config['general']['interval'])
 

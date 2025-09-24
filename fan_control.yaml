@@ -1,6 +1,7 @@
 general:
   debug: true
   interval: 10
+  smartinterval: 3600
 
 hosts:
   - name: local_ipmi
